@@ -438,12 +438,15 @@ Scope {
                 //    with this button as the anchor (an AnchoredPopup opens
                 //    above it); without a registered action it falls back to
                 //    `qs ipc call <id> toggle`. Lit while the action's popup
-                //    reports itself open. ──
+                //    reports itself open. A plugin hides its own item at
+                //    runtime through Shell.setDockItemShown (Music with no
+                //    player) — shown unless it says otherwise. ──
                 Repeater {
                     model: PluginHost.dockItems || []
                     delegate: DockBtn {
                         id: pluginBtn
                         required property var modelData
+                        visible: (typeof Shell.dockItemShown === "function") ? Shell.dockItemShown(modelData.id) !== false : true
                         a11yName: modelData.label
                         glyph: Theme[modelData.icon] || Theme.icApps
                         activeState: modelData.action !== "" && Shell.isActive(modelData.action)
