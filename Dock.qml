@@ -21,7 +21,7 @@ import qs
 // Settings → Layout → Dock, ewe.conf [desktop.dock]; this file falls back to
 // the same prefs on Globals while the shell is older), Shell.pinnedApps /
 // Shell.setPinned, Shell.overviewOpen, Shell.activeCount, the dock-item
-// registry (PluginHost.dockItems) and Theme's dock roles and sizes.
+// registry (Shell.dockItems) and Theme's dock roles and sizes.
 //
 // What it gives the shell: Shell.setBottomInset("ewe.dock", px, reserved) —
 // the strip it takes from the bottom of every screen (dock + windowGap), 0
@@ -72,13 +72,16 @@ Scope {
     function toggleLauncher(btn) {
         if (btn) root.launcherAnchorX = btn.mapToItem(null, btn.width / 2, 0).x
         root.closeStoreFallback()
+        if (!root.launcherOpen) Shell.closePopups(root.pluginId)   // one add-on popup at a time
         root.launcherOpen = !root.launcherOpen
     }
-    // opening one dock panel closes the others: another add-on's popup
-    // reports itself open through Shell.setActive; the in-shell store
-    // fallback through its flag
+    // opening one dock panel closes the others: Shell.closePopups (every
+    // AnchoredPopup and Places call it when they open) — and, belt and
+    // braces, another add-on's popup reporting itself open through
+    // Shell.setActive; the in-shell store fallback through its flag
     Connections {
         target: Shell
+        function onPopupsClosing(exceptId) { if (exceptId !== root.pluginId) root.launcherOpen = false }
         function onActiveCountChanged() { if (Shell.activeCount > 0) root.launcherOpen = false }
         function onAboutToSleep() { root.launcherOpen = false }
         function onLockedChanged() { if (Shell.locked) root.launcherOpen = false }
@@ -129,10 +132,7 @@ Scope {
         }
     }
     // in-shell: flip the flag (a `qs ipc call` spawn cost 50-70 ms per click)
-    function toggleOverview() {
-        if (typeof Shell.toggleOverview === "function") Shell.toggleOverview()
-        else Globals.overviewOpen = !Globals.overviewOpen
-    }
+    function toggleOverview() { Shell.toggleOverview() }
 
     // ── Komble: the software manager when installed; the shell's in-shell
     //    quick-installer panel is only the fallback, anchored on the button ─
@@ -149,10 +149,8 @@ Scope {
     function closeStoreFallback() { if ("storeOpen" in Globals && Globals.storeOpen) Globals.storeOpen = false }
 
     // ── the main screen: the shell's primary output (a shell concept —
-    //    Wayland has none; Shell.primaryScreenName when exposed, HyprMon's
-    //    flag until then) ───────────────────────────────────────────────────
-    readonly property string primaryName: ("primaryScreenName" in Shell) ? String(Shell.primaryScreenName || "") : root._hyprMonPrimary()
-    function _hyprMonPrimary() { try { return String(HyprMon.primaryName || "") } catch (e) { return "" } }
+    //    Wayland has none; Shell.primaryScreenName) ──────────────────────────
+    readonly property string primaryName: String(Shell.primaryScreenName || "")
 
     // ── windows ─────────────────────────────────────────────────────────────
     function clsOf(t) { return (t && t.lastIpcObject && t.lastIpcObject.class) ? t.lastIpcObject.class : (t && t.wayland ? (t.wayland.appId || "") : "") }
@@ -442,11 +440,11 @@ Scope {
                 //    runtime through Shell.setDockItemShown (Music with no
                 //    player) — shown unless it says otherwise. ──
                 Repeater {
-                    model: PluginHost.dockItems || []
+                    model: Shell.dockItems || []
                     delegate: DockBtn {
                         id: pluginBtn
                         required property var modelData
-                        visible: (typeof Shell.dockItemShown === "function") ? Shell.dockItemShown(modelData.id) !== false : true
+                        visible: Shell.dockItemShown(modelData.id)
                         a11yName: modelData.label
                         glyph: Theme[modelData.icon] || Theme.icApps
                         activeState: modelData.action !== "" && Shell.isActive(modelData.action)
